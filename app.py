@@ -123,7 +123,7 @@ if prompt:
     
     # Check if the assistant's response indicates lack of information.
     assistant_response = response['answer']
-    if "I'm sorry" in assistant_response or "I don't have information" in assistant_response or "datasheet does not provide" in assistant_response or "does not provide specific information" in assistant_response or "text doesn't provide information" in assistant_response or "provided context does not include" in assistant_response or "document provided doesn't include" in assistant_response:
+    if "I'm sorry" in assistant_response or "I don't know" in assistant_response or "I don't have information" in assistant_response or "datasheet does not provide" in assistant_response or "does not provide specific information" in assistant_response or "text doesn't provide information" in assistant_response or "provided context does not include" in assistant_response or "document provided doesn't include" in assistant_response:
         # If response is unhelpful, use a ThreadPoolExecutor to get a GPT response.
         with ThreadPoolExecutor() as executor:
             gpt_future = executor.submit(get_gpt_response, prompt, st.session_state.messages)
