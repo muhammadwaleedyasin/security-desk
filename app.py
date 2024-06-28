@@ -56,7 +56,7 @@ def load_and_process_files(file_paths):
     return vectorstore
 
 # Example file paths. you can add as many as you want to
-file_paths = ['intents-responses-01.csv','data.txt','output.txt']
+file_paths = ['intents-responses-01.csv','data.txt','output1.txt']
 # Loading the files, process them, and create the vectorstore
 vectorstore = load_and_process_files(file_paths)
 
