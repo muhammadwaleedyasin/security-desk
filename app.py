@@ -2,69 +2,24 @@ import streamlit as st
 import openai
 import pandas as pd
 import os
-import time
-import pickle
 from dotenv import load_dotenv
 from langchain.document_loaders import PyPDFLoader, TextLoader
 from langchain.text_splitter import RecursiveCharacterTextSplitter
-# from langchain.embeddings import OpenAIEmbeddings
+from langchain.embeddings import OpenAIEmbeddings
 from langchain.vectorstores import FAISS
 from langchain.chains import ConversationalRetrievalChain
 from langchain.memory import ConversationBufferMemory
 from langchain.chat_models import ChatOpenAI
 from concurrent.futures import ThreadPoolExecutor
-from openai import RateLimitError
-from langchain_openai import OpenAIEmbeddings
-# Load .env variable from local directory
-load_dotenv()
+import time
 
 # Get the API key from Streamlit secrets
 openai.api_key = st.secrets["OPENAI_API_KEY"]
 
-def process_in_batches(texts, batch_size=50):
-    all_embeddings = []
-    all_texts = []
-    progress_bar = st.progress(0)
-    
-    embeddings = OpenAIEmbeddings()
-    
-    for i in range(0, len(texts), batch_size):
-        batch = texts[i:i+batch_size]
-        
-        retry_attempts = 5
-        retry_delay = 1  # Initial delay in seconds
-        
-        for attempt in range(retry_attempts):
-            try:
-                batch_embeddings = embeddings.embed_documents([t.page_content for t in batch])
-                all_embeddings.extend(batch_embeddings)
-                all_texts.extend([t.page_content for t in batch])
-                break
-            except RateLimitError as e:
-                if attempt < retry_attempts - 1:
-                    time.sleep(retry_delay)
-                    retry_delay *= 2  # Exponential backoff
-                else:
-                    raise e
-        
-        # Update progress bar
-        progress = (i + batch_size) / len(texts)
-        progress_bar.progress(min(progress, 1.0))
-        
-        # Add a small delay between batches
-        time.sleep(5)
-    
-    # Create a single FAISS index from all embeddings
-    vectorstore = FAISS.from_texts(all_texts, embeddings, metadatas=[{"source": i} for i in range(len(all_texts))])
-    
-    progress_bar.empty()
-    
-    return vectorstore
-
+@st.cache_resource
+# Function to load Files and change them into useable formats
 def load_and_process_files(file_paths):
     documents = []
-    processed_files_count = 0
-    progress_placeholder = st.empty()
     for file_path in file_paths:
         try:
             if file_path.endswith('.pdf'):
@@ -82,10 +37,6 @@ def load_and_process_files(file_paths):
                 continue
             
             documents.extend(loader.load())
-            processed_files_count += 1
-            
-            # Update the counter in the sidebar
-            progress_placeholder.markdown(f"**Number of processed files:** {processed_files_count}")
         except Exception as e:
             continue
     
@@ -93,38 +44,21 @@ def load_and_process_files(file_paths):
     # and an overlap of 100 characters between consecutive chunks.
     text_splitter = RecursiveCharacterTextSplitter(chunk_size=1000, chunk_overlap=100)
     # Split the list of documents into smaller text chunks based on the specified chunk size and overlap.
+    # The result is stored in the 'texts' variable.
     texts = text_splitter.split_documents(documents)
     
-    # Process texts in batches
-    vectorstore = process_in_batches(texts)
-    
-    # Remove the progress counter once all files are processed
-    progress_placeholder.empty()
+    # Create vectorstore
+    embeddings = OpenAIEmbeddings()
+    # Creating a FAISS vector store from the text chunks using the generated embeddings
+    # This allows efficient similarity search and retrieval of text chunks
+    vectorstore = FAISS.from_documents(texts, embeddings)
     
     return vectorstore
 
-def save_vectorstore(vectorstore, file_path='vectorstore.pkl'):
-    with open(file_path, 'wb') as f:
-        pickle.dump(vectorstore, f)
-
-def load_vectorstore(file_path='vectorstore.pkl'):
-    with open(file_path, 'rb') as f:
-        return pickle.load(f)
-
-def load_or_create_vectorstore(file_paths, vectorstore_path='vectorstore.pkl'):
-    if os.path.exists(vectorstore_path):
-        st.info("Loading existing vectorstore...")
-        return load_vectorstore(vectorstore_path)
-    else:
-        st.info("Creating new vectorstore...")
-        vectorstore = load_and_process_files(file_paths)
-        save_vectorstore(vectorstore, vectorstore_path)
-        return vectorstore
-
-# Example file paths. Add your file paths here
+# Example file paths. you can add as many as you want to
 file_paths = ['intents-responses-01.csv','data.txt','output.txt']
 # Loading the files, process them, and create the vectorstore
-vectorstore = load_or_create_vectorstore(file_paths)
+vectorstore = load_and_process_files(file_paths)
 
 # Creating a conversational chain, setting parameter according to our requirements
 @st.cache_resource
@@ -140,8 +74,7 @@ def create_conversational_chain():
     )
 
 conversational_chain = create_conversational_chain()
-
-# The title being displayed at the top of conversation page
+# The title beeing displayed at the top of conversation page
 st.title('Security Help Desk!')
 
 # Initializing session state
@@ -154,31 +87,20 @@ if 'untrained_response' not in st.session_state:
 for message in st.session_state.messages:
     st.chat_message(message['role']).markdown(message['content'])
 
-# Get user input (This is where you will write your prompt)
+# Get user input(This is where you will write your prompt)
 prompt = st.chat_input('How can I assist you today?')
 
-# Function to get responses from GPT-3.5 Turbo
+# Function to get responses from gpt 3.5 turbo
 def get_gpt_response(prompt, context):
-    retry_attempts = 5
-    retry_delay = 1  # Initial delay in seconds
-
-    for attempt in range(retry_attempts):
-        try:
-            response = openai.ChatCompletion.create(
-                model="gpt-3.5-turbo",
-                messages=[
-                    {"role": "system", "content": "You are a helpful assistant."},
-                    *context,
-                    {"role": "user", "content": prompt}
-                ]
-            )
-            return response.choices[0].message['content']
-        except RateLimitError as e:
-            if attempt < retry_attempts - 1:
-                time.sleep(retry_delay)
-                retry_delay *= 2  # Exponential backoff
-            else:
-                raise e
+    response = openai.ChatCompletion.create(
+        model="gpt-3.5-turbo",
+        messages=[
+            {"role": "system", "content": "You are a helpful assistant."},
+            *context,
+            {"role": "user", "content": prompt}
+        ]
+    )
+    return response.choices[0].message['content']
 
 # Animation of appearing text like chatgpt interface
 def display_response_animation(response, role):
@@ -200,7 +122,7 @@ if prompt:
     response = conversational_chain({"question": prompt})
     
     # Check if the assistant's response indicates lack of information.
-    assistant_response = response.get('answer', "I'm sorry, I don't have information regarding that.")
+    assistant_response = response['answer']
     if "I'm sorry" in assistant_response or "I don't have information" in assistant_response or "datasheet does not provide" in assistant_response or "does not provide specific information" in assistant_response or "text doesn't provide information" in assistant_response or "provided context does not include" in assistant_response or "document provided doesn't include" in assistant_response:
         # If response is unhelpful, use a ThreadPoolExecutor to get a GPT response.
         with ThreadPoolExecutor() as executor:
