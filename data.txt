@@ -1,0 +1,6 @@
+“Aeris Lite” our latest masterpiece: the cutting-edge Indoor Air Quality monitor, infused with unrivalled intelligence and connectivity.
+This device sets a new standard for indoor air quality monitoring and management. Harnessing the power of advanced technologies like Thread and Zigbee, our device creates a harmonious ecosystem within your living spaces. Communicates with other smart devices, enabling a seamless integration that transforms your home or office into an oasis of purity. From detecting pollutants and monitoring temperature and humidity to ensuring optimal air circulation, our device is a testament to our unwavering commitment to your well-being.
+
+Twenty-One Pte Ltd will provide security update support to the above mentioned Aeris Lite until 15th June 2027, and extended support may be provided after the stated date.
+
+
